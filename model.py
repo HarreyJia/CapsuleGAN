@@ -1,14 +1,3 @@
-import numpy as np
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from torch.optim import Adam
-from torchvision import datasets, transforms
-
-USE_CUDA = FALSE
-
 def softmax(input, dim=1):
   transposed_input = input.transpose(dim, len(input.size()) - 1)
   softmaxed_output = F.softmax(transposed_input.contiguous().view(-1, transposed_input.size(-1)), dim=-1)
@@ -123,97 +112,58 @@ class CapsNet(nn.Module):
     self.conv_layer = ConvLayer()
     self.primary_capsules = PrimaryCaps()
     self.digit_capsules = DigitCaps().squeeze().transpose(0, 1)
-    self.decoder = Decoder()
+    # self.decoder = Decoder()
     
-    self.mse_loss = nn.MSELoss()
+    # self.mse_loss = nn.MSELoss()
       
   def forward(self, data):
     output = self.digit_capsules(self.primary_capsules(self.conv_layer(data)))
+    return output
 
-    reconstructions, masked = self.decoder(output, data)
-    return output, reconstructions, masked
+    #reconstructions, masked = self.decoder(output, data)
+    #return output, reconstructions, masked
     
-  def loss(self, data, x, target, reconstructions):
-    return self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
+  # def loss(self, data, x, target, reconstructions):
+  #   return self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
   
-  def margin_loss(self, x, labels, size_average=True):
-    batch_size = x.size(0)
+  # def margin_loss(self, x, labels, size_average=True):
+  #   batch_size = x.size(0)
 
-    v_c = torch.sqrt((x**2).sum(dim=2, keepdim=True))
+  #   v_c = torch.sqrt((x**2).sum(dim=2, keepdim=True))
 
-    left = F.relu(0.9 - v_c).view(batch_size, -1)
-    right = F.relu(v_c - 0.1).view(batch_size, -1)
+  #   left = F.relu(0.9 - v_c).view(batch_size, -1)
+  #   right = F.relu(v_c - 0.1).view(batch_size, -1)
 
-    loss = labels * left + 0.5 * (1.0 - labels) * right
-    loss = loss.sum(dim=1).mean()
+  #   loss = labels * left + 0.5 * (1.0 - labels) * right
+  #   loss = loss.sum(dim=1).mean()
 
-    return loss
+  #   return loss
   
-  def reconstruction_loss(self, data, reconstructions):
-    loss = self.mse_loss(reconstructions.view(reconstructions.size(0), -1), data.view(reconstructions.size(0), -1))
-    return loss * 0.0005
+  # def reconstruction_loss(self, data, reconstructions):
+  #   loss = self.mse_loss(reconstructions.view(reconstructions.size(0), -1), data.view(reconstructions.size(0), -1))
+  #   return loss * 0.0005
 
 
-n = torch.randn(25, 1, 28, 28, 28)
+class CapsuleLoss(nn.Module):
+  def __init__(self):
+      super(CapsuleLoss, self).__init__()
+      # self.reconstruction_loss = nn.MSELoss(size_average=False)
 
-model = CapsNet()
+  # def forward(self, images, labels, classes, reconstructions):
+  def forward(self, classes, labels):
+      left = F.relu(0.9 - classes, inplace=True) ** 2
+      right = F.relu(classes - 0.1, inplace=True) ** 2
 
-if USE_CUDA:
-  capsule_net = capsule_net.cuda()
+      margin_loss = labels * left + 0.5 * (1. - labels) * right
+      margin_loss = margin_loss.sum()
 
-optimizer = Adam(capsule_net.parameters())
+      return margin_loss
 
+      # assert torch.numel(images) == torch.numel(reconstructions)
+      # images = images.view(reconstructions.size()[0], -1)
+      # reconstruction_loss = self.reconstruction_loss(reconstructions, images)
 
-# Training
-batch_size = 100
-mnist = Mnist(batch_size)
-
-n_epochs = 30
-
-for epoch in range(n_epochs):
-    capsule_net.train()
-    train_loss = 0
-    for batch_id, (data, target) in enumerate(mnist.train_loader):
-
-        target = torch.sparse.torch.eye(10).index_select(dim=0, index=target)
-        data, target = Variable(data), Variable(target)
-
-        if USE_CUDA:
-            data, target = data.cuda(), target.cuda()
-
-        optimizer.zero_grad()
-        output, reconstructions, masked = capsule_net(data)
-        loss = capsule_net.loss(data, output, target, reconstructions)
-        loss.backward()
-        optimizer.step()
-
-        train_loss += loss.data[0]
-        
-        if batch_id % 100 == 0:
-            print("train accuracy:", sum(np.argmax(masked.data.cpu().numpy(), 1) == 
-                                   np.argmax(target.data.cpu().numpy(), 1)) / float(batch_size))
-        
-    print(train_loss / len(mnist.train_loader))
-        
-    capsule_net.eval()
-    test_loss = 0
-    for batch_id, (data, target) in enumerate(mnist.test_loader):
-
-        target = torch.sparse.torch.eye(10).index_select(dim=0, index=target)
-        data, target = Variable(data), Variable(target)
-
-        if USE_CUDA:
-            data, target = data.cuda(), target.cuda()
-        output, reconstructions, masked = capsule_net(data)
-        loss = capsule_net.loss(data, output, target, reconstructions)
-
-        test_loss += loss.data[0]
-        
-        if batch_id % 100 == 0:
-            print("test accuracy:", sum(np.argmax(masked.data.cpu().numpy(), 1) == 
-                                   np.argmax(target.data.cpu().numpy(), 1)) / float(batch_size))
-    
-    print(test_loss / len(mnist.test_loader))
+      # return (margin_loss + 0.0005 * reconstruction_loss) / images.size(0)
 
 
 # conv = ConvLayer()
@@ -231,3 +181,41 @@ for epoch in range(n_epochs):
 # print(digit_result.size()) # torch.Size([10, 25, 16])
 # digit_result = digit_result.transpose(0, 1)
 # print(digit_result.size()) # torch.Size([25, 10, 16])
+
+
+
+# Generator
+class Generator(nn.Module):
+  def __init__(self, ngpu):
+    super(Generator, self).__init__()
+    self.ngpu = ngpu
+
+    self.project = nn.Sequential(
+      nn.Linear(nz, 4 * 4 * ngf * 8, bias=False)
+    )
+    self.deconv = nn.Sequential(
+      # input is Z, going into a deconvolution
+      # state size. (ngf*8) x 4 x 4 x 4
+      nn.ConvTranspose3d(ngf * 8, ngf * 4, kernel_size=4, stride=2, padding=1, bias=False),
+      nn.BatchNorm3d(ngf * 4),
+      nn.ReLU(True),
+      # state size. (ngf*4) x 8 x 8 x 8
+      nn.ConvTranspose3d(ngf * 4, ngf * 2, kernel_size=4, stride=2, padding=1, bias=False),
+      nn.BatchNorm3d(ngf * 2),
+      nn.ReLU(True),
+      # state size. (ngf*2) x 16 x 16 x 16
+      nn.ConvTranspose3d(ngf * 2, ngf, kernel_size=4, stride=2, padding=1, bias=False),
+      nn.BatchNorm3d(ngf),
+      nn.ReLU(True),
+      # state size. (ngf) x 32 x 32 x 32
+      nn.ConvTranspose3d(ngf, 1, kernel_size=4, stride=2, padding=1, bias=False),
+      nn.Tanh()
+      # state size. 1 x 64 x 64 x 64
+    )
+
+  def forward(self, input):
+    x = self.project(input)
+    # Conv3d的规定输入数据格式为(batch, channel, Depth, Height, Width)
+    x = x.view(1, ngf * 8, 4, 4, 4)
+    x = self.deconv(x)
+    return x
