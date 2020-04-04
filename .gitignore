@@ -1,2 +1,4 @@
 data/
 .ipynb_checkpoints/
+output/
+temp_dir/
