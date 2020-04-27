@@ -1,4 +1,5 @@
 data/
 .ipynb_checkpoints/
-output/nodule_img/
+output/
 temp_dir/
+__pycache__/
