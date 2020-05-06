@@ -1,5 +1,7 @@
 data/
 .ipynb_checkpoints/
-output/
 temp_dir/
 __pycache__/
+AC-CapsuleGAN_output/
+output/
+result/
